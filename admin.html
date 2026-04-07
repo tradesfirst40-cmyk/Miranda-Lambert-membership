@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Submissions — Miranda Lambert Fan Membership</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f1318; color: #ececec; margin: 0; padding: 24px; }
+    .page { max-width: 1100px; margin: 0 auto; }
+    h1 { color: #f2c775; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 12px 10px; border: 1px solid rgba(255,255,255,0.08); text-align: left; }
+    th { background: #161b21; color: #f8f4e7; }
+    td { background: #141a20; }
+    tr:hover td { background: #1e262f; }
+    .tag { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.85rem; background: rgba(242,199,117,0.18); color: #f2c775; }
+    .notice { margin-top: 16px; color: #b9b9b9; }
+    .link { color: #c9a84c; text-decoration: none; }
+    .error { color: #ff8c8c; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Admin Submissions</h1>
+    <p class="notice">This page is protected by HTTP Basic Auth. Only access it with your admin username and password.</p>
+    <div id="status"></div>
+    <table id="submissions-table" hidden>
+      <thead>
+        <tr>
+          <th>Submission ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Tier</th>
+          <th>Amount</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th>Proof</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function loadSubmissions() {
+      const status = document.getElementById('status');
+      const table = document.getElementById('submissions-table');
+      const tbody = table.querySelector('tbody');
+      status.textContent = 'Loading submissions...';
+
+      try {
+        const res = await fetch('/admin/api/submissions');
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Failed to load submissions.');
+        }
+        const submissions = await res.json();
+        if (!Array.isArray(submissions) || submissions.length === 0) {
+          status.textContent = 'No submissions found yet.';
+          return;
+        }
+
+        table.hidden = false;
+        status.textContent = `${submissions.length} submission(s) found.`;
+        tbody.innerHTML = submissions.map(item => {
+          const proofLink = item.proofImage ? `<a class="link" href="/admin/proof/${encodeURIComponent(item.proofImage)}" target="_blank">View</a>` : 'None';
+          return `
+            <tr>
+              <td><span class="tag">${item.submissionId || '—'}</span></td>
+              <td>${item.fullName || '—'}</td>
+              <td>${item.email || '—'}</td>
+              <td>${item.tier || '—'}</td>
+              <td>${item.amountPaid || item.price || '—'}</td>
+              <td>${item.paymentMethod || '—'}</td>
+              <td>${item.status || 'pending'}</td>
+              <td>${proofLink}</td>
+              <td>${new Date(item.createdAt).toLocaleString() || '—'}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        status.innerHTML = `<span class="error">${err.message}</span>`;
+      }
+    }
+
+    loadSubmissions();
+  </script>
+</body>
+</html>

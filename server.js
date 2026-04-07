@@ -11,6 +11,29 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASS = process.env.ADMIN_PASS;
+
+function requireAdminAuth(req, res, next) {
+  if (!ADMIN_USER || !ADMIN_PASS) {
+    return res.status(503).send('Admin auth is not configured. Set ADMIN_USER and ADMIN_PASS in .env.');
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    res.set('WWW-Authenticate', 'Basic realm="Fan Membership Admin"');
+    return res.status(401).send('Authentication required.');
+  }
+
+  const [username, password] = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    return next();
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="Fan Membership Admin"');
+  return res.status(401).send('Invalid credentials.');
+}
+
 // ── MongoDB Connection ──────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
@@ -50,6 +73,30 @@ const paymentSchema = new mongoose.Schema({
 
 const Billing = mongoose.model('Billing', billingSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
+
+app.get('/admin', requireAdminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+app.get('/admin/api/submissions', requireAdminAuth, async (req, res) => {
+  try {
+    const payments = await Payment.find().sort({ createdAt: -1 }).lean();
+    res.json(payments);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load submissions.' });
+  }
+});
+
+app.get('/admin/proof/:filename', requireAdminAuth, (req, res) => {
+  const filePath = path.join(__dirname, 'uploads', 'payment-proofs', req.params.filename);
+  res.sendFile(filePath, err => {
+    if (err) {
+      console.error('Proof file error:', err);
+      res.status(err.statusCode || 404).send('Proof not found.');
+    }
+  });
+});
 
 // ── Multer (file uploads) ───────────────────────────────────────
 const storage = multer.diskStorage({
